@@ -1,6 +1,9 @@
 package loki
 
 import (
+	"bufio"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -38,3 +41,41 @@ func TestLokiFramer(t *testing.T) {
 		require.Equal(t, "line4", lines.At(3))
 	})
 }
+
+const fixture = `data: {"status":"success","data":{"resultType":"streams","result":[1]}}
+
+
+data: {"status":"success","data":{"resultType":"streams","result":[2]}}
+
+
+data: {"status":"success","data":{"resultType":"streams","result":[3]}}`
+
+type testData struct {
+	Status string
+	Data struct {
+		ResultType string
+		Result []int
+	}
+}
+
+func TestLokiEventStream(t *testing.T) {
+	blob := `{"status":"success","data":{"resultType":"streams","result":[5]}}`
+	var d testData 
+	err := json.Unmarshal([]byte(blob), &d)
+	require.NoError(t, err)
+	require.Equal(t, 5, d.Data.Result[0])
+
+	scanner := bufio.NewScanner(strings.NewReader(fixture))
+	scanner.Split(eventStream)
+	count := 0	
+	for scanner.Scan() {
+		count++
+		blob := scanner.Bytes()
+		var d testData 
+		err := json.Unmarshal(blob, &d)
+		require.NoErrorf(t, err, "JSON: %s, iteraton: %d", string(blob), count)
+		require.Equalf(t, count, d.Data.Result[0], "JSON: %s", string(blob))
+	}
+	require.Equal(t, 3, count)
+}
+

@@ -1,16 +1,19 @@
 package loki
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
 	"strings"
 	"time"
+	//"unicode/utf8"
 
-	"github.com/gorilla/websocket"
+	// "github.com/gorilla/websocket"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 
@@ -87,36 +90,26 @@ func (s *Service) RunStream(ctx context.Context, req *backend.RunStreamRequest, 
 	lokiDataframeApi := s.features.IsEnabled(featuremgmt.FlagLokiDataframeApi)
 
 	wsurl, _ := url.Parse(dsInfo.URL)
+	wsurl.Path = "/loki/api/v1/query_range"
+	wsurl.Scheme = "https"
 
-	if lokiDataframeApi {
-		wsurl.Path = "/loki/api/v2alpha/tail"
-	} else {
-		wsurl.Path = "/loki/api/v1/tail"
-	}
-
-	if wsurl.Scheme == "https" {
-		wsurl.Scheme = "wss"
-	} else {
-		wsurl.Scheme = "ws"
-	}
 	wsurl.RawQuery = params.Encode()
 
-	logger.Info("connecting to websocket", "url", wsurl)
-	c, r, err := websocket.DefaultDialer.Dial(wsurl.String(), nil)
+	logger.Info("connecting to query range", "url", wsurl)
+	var client http.Client
+	resp, err := client.Get(wsurl.String())
 	if err != nil {
-		logger.Error("error connecting to websocket", "err", err)
-		return fmt.Errorf("error connecting to websocket")
+		logger.Error("error connecting to Loki", "err", err)
+		return fmt.Errorf("error connecting to Loki")
 	}
 
 	defer func() {
 		dsInfo.streamsMu.Lock()
 		delete(dsInfo.streams, req.Path)
 		dsInfo.streamsMu.Unlock()
-		if r != nil {
-			_ = r.Body.Close()
+		if resp != nil {
+			_ = resp.Body.Close()
 		}
-		err = c.Close()
-		logger.Error("closing loki websocket", "err", err)
 	}()
 
 	prev := data.FrameJSONCache{}
@@ -125,8 +118,10 @@ func (s *Service) RunStream(ctx context.Context, req *backend.RunStreamRequest, 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for {
-			_, message, err := c.ReadMessage()
+		scanner := bufio.NewScanner(resp.Body)
+		scanner.Split(eventStream)
+		for scanner.Scan() {
+			message := scanner.Bytes()
 			if err != nil {
 				logger.Error("websocket read:", "err", err)
 				return
@@ -184,3 +179,61 @@ func (s *Service) PublishStream(_ context.Context, _ *backend.PublishStreamReque
 		Status: backend.PublishStreamStatusPermissionDenied,
 	}, nil
 }
+
+func eventStream(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if atEOF {
+		return len(data), nil, nil
+	}
+
+	/*
+	// Skip leading spaces.
+	start := 0
+	for width := 0; start < len(data); start += width {
+		var r rune
+		r, width = utf8.DecodeRune(data[start:])
+		if !isSpace(r) {
+			break
+		}
+	}
+	data = data[start:]
+	*/
+
+	i := strings.Index(string(data), "data: ")
+	if i == -1 {
+		return len(data), nil, nil
+	}
+
+	start := i + len("data: ")
+	end := strings.Index(string(data[start:]), "\n\n")
+	if end == -1 {
+		return len(data), data[start:], nil
+	}
+
+	return start + end + 3, data[start:start+end], nil
+}
+
+// isSpace reports whether the character is a Unicode white space character.
+// We avoid dependency on the unicode package, but check validity of the implementation
+// in the tests.
+func isSpace(r rune) bool {
+	if r <= '\u00FF' {
+		// Obvious ASCII ones: \t through \r plus space. Plus two Latin-1 oddballs.
+		switch r {
+		case ' ', '\t', '\n', '\v', '\f', '\r':
+			return true
+		case '\u0085', '\u00A0':
+			return true
+		}
+		return false
+	}
+	// High-valued ones.
+	if '\u2000' <= r && r <= '\u200a' {
+		return true
+	}
+	switch r {
+	case '\u1680', '\u2028', '\u2029', '\u202f', '\u205f', '\u3000':
+		return true
+	}
+	return false
+}
+
