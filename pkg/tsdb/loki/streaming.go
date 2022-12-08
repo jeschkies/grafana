@@ -3,7 +3,6 @@ package loki
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -17,7 +16,7 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 
-	"github.com/grafana/grafana/pkg/services/featuremgmt"
+	//"github.com/grafana/grafana/pkg/services/featuremgmt"
 )
 
 func (s *Service) SubscribeStream(_ context.Context, req *backend.SubscribeStreamRequest) (*backend.SubscribeStreamResponse, error) {
@@ -87,7 +86,7 @@ func (s *Service) RunStream(ctx context.Context, req *backend.RunStreamRequest, 
 	params := url.Values{}
 	params.Add("query", query.Expr)
 
-	lokiDataframeApi := s.features.IsEnabled(featuremgmt.FlagLokiDataframeApi)
+	//lokiDataframeApi := s.features.IsEnabled(featuremgmt.FlagLokiDataframeApi)
 
 	wsurl, _ := url.Parse(dsInfo.URL)
 	wsurl.Path = "/loki/api/v1/query_range"
@@ -122,17 +121,13 @@ func (s *Service) RunStream(ctx context.Context, req *backend.RunStreamRequest, 
 		scanner.Split(eventStream)
 		for scanner.Scan() {
 			message := scanner.Bytes()
-			if err != nil {
-				logger.Error("websocket read:", "err", err)
-				return
-			}
 
 			frame := &data.Frame{}
-			if !lokiDataframeApi {
-				frame, err = lokiBytesToLabeledFrame(message)
-			} else {
-				err = json.Unmarshal(message, &frame)
-			}
+			//if !lokiDataframeApi {
+			frame, err = lokiStreamBytesToLabeledFrame(message)
+			//} else {
+			//	err = json.Unmarshal(message, &frame)
+			//}
 
 			if err == nil && frame != nil {
 				next, _ := data.FrameToJSONCache(frame)

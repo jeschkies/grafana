@@ -17,12 +17,25 @@ type lokiStream struct {
 	Values [][2]string `json:"values"`
 }
 
+type lokiResult struct {
+	Status string `json:"status"`
+	Data struct {
+		ResultType string `json:"resultType"`
+		Result []lokiStream `json:"result"`
+	} `json:"data"` 
+}
+
 func lokiBytesToLabeledFrame(msg []byte) (*data.Frame, error) {
 	rsp := &lokiResponse{}
 	err := json.Unmarshal(msg, rsp)
 	if err != nil {
 		return nil, err
 	}
+
+	return responseToDataFrame(rsp.Streams)
+}
+
+func responseToDataFrame(streams []lokiStream) (*data.Frame, error) {
 
 	labelField := data.NewFieldFromFieldType(data.FieldTypeString, 0)
 	timeField := data.NewFieldFromFieldType(data.FieldTypeTime, 0)
@@ -32,7 +45,7 @@ func lokiBytesToLabeledFrame(msg []byte) (*data.Frame, error) {
 	timeField.Name = "Time"
 	lineField.Name = "Line"
 
-	for _, stream := range rsp.Streams {
+	for _, stream := range streams {
 		label := stream.Stream.String() // TODO -- make it match prom labels!
 		for _, value := range stream.Values {
 			n, err := strconv.ParseInt(value[0], 10, 64)
@@ -49,4 +62,14 @@ func lokiBytesToLabeledFrame(msg []byte) (*data.Frame, error) {
 	}
 
 	return data.NewFrame("", labelField, timeField, lineField), nil
+}
+
+func lokiStreamBytesToLabeledFrame(msg []byte) (*data.Frame, error) {
+	rsp := &lokiResult{}
+	err := json.Unmarshal(msg, rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	return responseToDataFrame(rsp.Data.Result)
 }
