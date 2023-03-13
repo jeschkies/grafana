@@ -10,7 +10,9 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 	"github.com/grafana/grafana-plugin-sdk-go/experimental"
+	"github.com/grafana/grafana/pkg/tsdb/tempo"
 	jsoniter "github.com/json-iterator/go"
+	"go.opentelemetry.io/collector/model/otlp"
 )
 
 // helpful while debugging all the options that may appear
@@ -131,6 +133,8 @@ func readPrometheusData(iter *jsoniter.Iterator, opt Options) *backend.DataRespo
 				rsp = readString(iter)
 			case "scalar":
 				rsp = readScalar(iter)
+			case "trace":
+				rsp = readTrace(iter)
 			default:
 				iter.Skip()
 				rsp = &backend.DataResponse{
@@ -564,6 +568,24 @@ func readTimeValuePair(iter *jsoniter.Iterator) (time.Time, float64, error) {
 	tt := timeFromFloat(t)
 	fv, err := strconv.ParseFloat(v, 64)
 	return tt, fv, err
+}
+
+func readTrace(iter *jsoniter.Iterator) (*backend.DataResponse, error) {
+	buf := iter.SkipAndReturnBytes()
+	otTrace, err := otlp.NewJSONTracesUnmarshaler().UnmarshalTraces(buf)
+
+	if err != nil {
+		return &backend.DataResponse{}, fmt.Errorf("failed to convert tempo response to Otlp: %w", err)
+	}
+
+	frame, err := tempo.TraceToFrame(otTrace)
+	if err != nil {
+		return &backend.DataResponse{}, fmt.Errorf("failed to transform trace to data frame: %w", err)
+	}
+
+	return &backend.DataResponse{
+		Frames: []*data.Frame{frame},
+	}, nil
 }
 
 func expandFrame(frame *data.Frame, idx int) {
