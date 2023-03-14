@@ -1,5 +1,5 @@
 import { css, cx } from '@emotion/css';
-import React, { FC, useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 
 import { Field, GrafanaTheme2, SelectableValue } from '@grafana/data';
 
@@ -17,7 +17,7 @@ interface Props {
   field?: Field;
 }
 
-export const FilterPopup: FC<Props> = ({ column: { preFilteredRows, filterValue, setFilter }, onClose, field }) => {
+export const FilterPopup = ({ column: { preFilteredRows, filterValue, setFilter }, onClose, field }: Props) => {
   const theme = useTheme2();
   const uniqueValues = useMemo(() => calculateUniqueFieldValues(preFilteredRows, field), [preFilteredRows, field]);
   const options = useMemo(() => valuesToOptions(uniqueValues), [uniqueValues]);
@@ -50,6 +50,8 @@ export const FilterPopup: FC<Props> = ({ column: { preFilteredRows, filterValue,
 
   return (
     <ClickOutsideWrapper onClick={onCancel} useCapture={true}>
+      {/* This is just blocking click events from bubbeling and should not have a keyboard interaction. */}
+      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
       <div className={cx(styles.filterContainer)} onClick={stopPropagation}>
         <VerticalGroup spacing="lg">
           <VerticalGroup spacing="xs">

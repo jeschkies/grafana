@@ -1,6 +1,7 @@
 package elasticsearch
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -59,30 +60,30 @@ func requireFloatAt(t *testing.T, expected float64, field *data.Field, index int
 	require.Equal(t, expected, *v, fmt.Sprintf("wrong flaot at index %v", index))
 }
 
+func requireTimeSeriesName(t *testing.T, expected string, frame *data.Frame) {
+	require.Equal(t, expected, frame.Name)
+}
+
 func TestRefIdMatching(t *testing.T) {
 	require.NoError(t, nil)
 	query := []byte(`
 			[
 				{
-					"timeField": "t",
 					"refId": "COUNT_GROUPBY_DATE_HISTOGRAM",
 					"metrics": [{ "type": "count", "id": "c_1" }],
 					"bucketAggs": [{ "type": "date_histogram", "field": "@timestamp", "id": "c_2" }]
 				},
 				{
-					"timeField": "t",
 					"refId": "COUNT_GROUPBY_HISTOGRAM",
 					"metrics": [{ "type": "count", "id": "h_3" }],
 					"bucketAggs": [{ "type": "histogram", "field": "bytes", "id": "h_4" }]
 				},
 				{
-					"timeField": "t",
 					"refId": "RAW_DOC",
 					"metrics": [{ "type": "raw_document", "id": "r_5" }],
 					"bucketAggs": []
 				},
 				{
-					"timeField": "t",
 					"refId": "PERCENTILE",
 					"metrics": [
 					{
@@ -94,7 +95,6 @@ func TestRefIdMatching(t *testing.T) {
 					"bucketAggs": [{ "type": "date_histogram", "field": "@timestamp", "id": "p_3" }]
 				},
 				{
-					"timeField": "t",
 					"refId": "EXTENDEDSTATS",
 					"metrics": [
 					{
@@ -109,8 +109,7 @@ func TestRefIdMatching(t *testing.T) {
 					]
 				},
 				{
-					"timeField": "t",
-					"refId": "D",
+					"refId": "RAWDATA",
 					"metrics": [{ "type": "raw_data", "id": "6" }],
 					"bucketAggs": []
 				}
@@ -242,10 +241,10 @@ func TestRefIdMatching(t *testing.T) {
 
 	verifyFrames("COUNT_GROUPBY_DATE_HISTOGRAM", 1)
 	verifyFrames("COUNT_GROUPBY_HISTOGRAM", 1)
-	// verifyFrames("RAW_DOC", 1) // FIXME
+	verifyFrames("RAW_DOC", 1)
 	verifyFrames("PERCENTILE", 2)
 	verifyFrames("EXTENDEDSTATS", 4)
-	// verifyFrames("D", 1) // FIXME
+	verifyFrames("RAWDATA", 1)
 }
 
 func TestSimpleQueryReturns1Frame(t *testing.T) {
@@ -253,7 +252,6 @@ func TestSimpleQueryReturns1Frame(t *testing.T) {
 		[
 			{
 				"refId": "A",
-				"timeField": "t",
 				"metrics": [{ "type": "count", "id": "1" }],
 				"bucketAggs": [
 				{ "type": "date_histogram", "field": "@timestamp", "id": "2" }
@@ -286,7 +284,7 @@ func TestSimpleQueryReturns1Frame(t *testing.T) {
 	frames := result.response.Responses["A"].Frames
 	require.Len(t, frames, 1, "frame-count wrong")
 	frame := frames[0]
-	// require.Equal(t, "Count", frame.Name) // FIXME
+	requireTimeSeriesName(t, "Count", frame)
 
 	requireFrameLength(t, frame, 2)
 	requireTimeValue(t, 1000, frame, 0)
@@ -298,7 +296,6 @@ func TestSimpleQueryCountAndAvg(t *testing.T) {
 	[
 		{
 			"refId": "A",
-			"timeField": "t",
 			"metrics": [
 			{ "type": "count", "id": "1" },
 			{ "type": "avg", "field": "value", "id": "2" }
@@ -343,7 +340,7 @@ func TestSimpleQueryCountAndAvg(t *testing.T) {
 	requireTimeValue(t, 1000, frame1, 0)
 	requireNumberValue(t, 10, frame1, 0)
 
-	// require.Equal(t, "average value", frame2.Name) // FIXME
+	requireTimeSeriesName(t, "Average value", frame2)
 
 	requireNumberValue(t, 88, frame2, 0)
 	requireNumberValue(t, 99, frame2, 1)
@@ -354,7 +351,6 @@ func TestSimpleGroupBy1Metric2Frames(t *testing.T) {
 	[
 		{
 			"refId": "A",
-			"timeField": "t",
 			"metrics": [{ "type": "count", "id": "1" }],
 			"bucketAggs": [
 			{ "type": "terms", "field": "host", "id": "2" },
@@ -407,8 +403,8 @@ func TestSimpleGroupBy1Metric2Frames(t *testing.T) {
 	require.Len(t, frames, 2)
 
 	requireFrameLength(t, frames[0], 2)
-	// require.Equal(t, "server1", frames[0].Name) // FIXME
-	// require.Equal(t, "server2", frames[1].Name) // FIXME
+	requireTimeSeriesName(t, "server1", frames[0])
+	requireTimeSeriesName(t, "server2", frames[1])
 }
 
 func TestSimpleGroupBy2Metrics4Frames(t *testing.T) {
@@ -416,7 +412,6 @@ func TestSimpleGroupBy2Metrics4Frames(t *testing.T) {
 	[
 		{
 		  "refId": "A",
-		  "timeField": "t",
 		  "metrics": [
 			{ "type": "count", "id": "1" },
 			{ "type": "avg", "field": "@value", "id": "4" }
@@ -471,10 +466,10 @@ func TestSimpleGroupBy2Metrics4Frames(t *testing.T) {
 	frames := result.response.Responses["A"].Frames
 	require.Len(t, frames, 4)
 	requireFrameLength(t, frames[0], 2)
-	// require.Equal(t, "server1 Count", frames[0].Name)          // FIXME
-	// require.Equal(t, "server1 Average @value", frames[1].Name) // FIXME
-	// require.Equal(t, "server2 Count", frames[2].Name)          // FIXME
-	// require.Equal(t, "server2 Average @value", frames[3].Name) // FIXME
+	requireTimeSeriesName(t, "server1 Count", frames[0])
+	requireTimeSeriesName(t, "server1 Average @value", frames[1])
+	requireTimeSeriesName(t, "server2 Count", frames[2])
+	requireTimeSeriesName(t, "server2 Average @value", frames[3])
 }
 
 func TestPercentiles2Frames(t *testing.T) {
@@ -482,7 +477,6 @@ func TestPercentiles2Frames(t *testing.T) {
 	[
 		{
 			"refId": "A",
-			"timeField": "t",
 			"metrics": [
 			{
 				"type": "percentiles",
@@ -531,8 +525,8 @@ func TestPercentiles2Frames(t *testing.T) {
 	require.Len(t, frames, 2)
 
 	requireFrameLength(t, frames[0], 2)
-	// require.Equal(t, "p75 @value", frames[0].Name) // FIXME
-	// require.Equal(t, "p90 @value", frames[1].Name) // FIXME
+	requireTimeSeriesName(t, "p75 @value", frames[0])
+	requireTimeSeriesName(t, "p90 @value", frames[1])
 
 	requireNumberValue(t, 3.3, frames[0], 0)
 	requireTimeValue(t, 1000, frames[0], 0)
@@ -544,7 +538,6 @@ func TestExtendedStats4Frames(t *testing.T) {
 	[
 		{
 			"refId": "A",
-			"timeField": "t",
 			"metrics": [
 			{
 				"type": "extended_stats",
@@ -615,8 +608,8 @@ func TestExtendedStats4Frames(t *testing.T) {
 	frames := result.response.Responses["A"].Frames
 	require.Len(t, frames, 4)
 	requireFrameLength(t, frames[0], 1)
-	// require.Equal(t, "server1 Max @value", frames[0].Name) // FIXME
-	// require.Equal(t, "server1 Std Dev Upper @value", frames[1].Name) // FIXME
+	requireTimeSeriesName(t, "server1 Max @value", frames[0])
+	requireTimeSeriesName(t, "server1 Std Dev Upper @value", frames[1])
 
 	requireNumberValue(t, 10.2, frames[0], 0)
 	requireNumberValue(t, 3, frames[1], 0)
@@ -627,7 +620,6 @@ func TestTopMetrics2Frames(t *testing.T) {
 	[
 		{
 			"refId": "A",
-			"timeField": "t",
 			"metrics": [
 			{
 				"type": "top_metrics",
@@ -698,14 +690,14 @@ func TestTopMetrics2Frames(t *testing.T) {
 	frame1 := frames[0]
 	frame2 := frames[1]
 
-	// require.Equal(t, "Top Metrics Value", frame1.Name) // FIXME
+	requireTimeSeriesName(t, "Top Metrics @value", frame1)
 	requireFrameLength(t, frame1, 2)
 	requireTimeValue(t, time1.UTC().UnixMilli(), frame1, 0)
 	requireTimeValue(t, time2.UTC().UnixMilli(), frame1, 1)
 	requireNumberValue(t, 1, frame1, 0)
 	requireNumberValue(t, 1, frame1, 1)
 
-	// require.Equal(t, "Top Metrics @anotherValue", frame2.Name) // FIXME
+	requireTimeSeriesName(t, "Top Metrics @anotherValue", frame2)
 	requireFrameLength(t, frame2, 2)
 	requireTimeValue(t, time1.UTC().UnixMilli(), frame2, 0)
 	requireTimeValue(t, time2.UTC().UnixMilli(), frame2, 1)
@@ -718,7 +710,6 @@ func TestSingleGroupWithAliasPattern3Frames(t *testing.T) {
 	[
 		{
 		  "refId": "A",
-		  "timeField": "t",
 		  "metrics": [{ "type": "count", "id": "1" }],
 		  "alias": "{{term @host}} {{metric}} and {{not_exist}} {{@host}}",
 		  "bucketAggs": [
@@ -782,9 +773,9 @@ func TestSingleGroupWithAliasPattern3Frames(t *testing.T) {
 	require.Len(t, frames, 3)
 
 	requireFrameLength(t, frames[0], 2)
-	// require.Equal(t, "server1 Count and {{not_exist}} server1", frames[0].Name) // FIXME
-	// require.Equal(t, "server2 Count and {{not_exist}} server2", frames[1].Name) // FIXME
-	// require.Equal(t, "0 Count and {{not_exist}} 0", frames[2].Name)             // FIXME
+	requireTimeSeriesName(t, "server1 Count and {{not_exist}} server1", frames[0])
+	requireTimeSeriesName(t, "server2 Count and {{not_exist}} server2", frames[1])
+	requireTimeSeriesName(t, "0 Count and {{not_exist}} 0", frames[2])
 }
 
 func TestHistogramSimple(t *testing.T) {
@@ -792,7 +783,6 @@ func TestHistogramSimple(t *testing.T) {
 	[
 		{
 			"refId": "A",
-			"timeField": "t",
 			"metrics": [{ "type": "count", "id": "1" }],
 			"bucketAggs": [{ "type": "histogram", "field": "bytes", "id": "3" }]
 		}
@@ -822,7 +812,8 @@ func TestHistogramSimple(t *testing.T) {
 
 	require.Len(t, result.response.Responses, 1)
 	frames := result.response.Responses["A"].Frames
-	// require.Len(t, frames, 3) // FIXME
+	require.Len(t, frames, 1)
+	requireFrameLength(t, frames[0], 3)
 
 	fields := frames[0].Fields
 	require.Len(t, fields, 2)
@@ -832,16 +823,14 @@ func TestHistogramSimple(t *testing.T) {
 
 	require.Equal(t, "bytes", field1.Name)
 
-	// trueValue := true
-	// filterableConfig := data.FieldConfig{Filterable: &trueValue}
+	trueValue := true
+	filterableConfig := data.FieldConfig{Filterable: &trueValue}
 
 	// we need to test that the only changed setting is `filterable`
-	// require.Equal(t, filterableConfig, *field1.Config) // FIXME
-
+	require.Equal(t, filterableConfig, *field1.Config)
 	require.Equal(t, "Count", field2.Name)
-
 	// we need to test that the fieldConfig is "empty"
-	require.Equal(t, data.FieldConfig{}, *field2.Config)
+	require.Nil(t, field2.Config)
 }
 
 func TestHistogramWith2FiltersAgg(t *testing.T) {
@@ -849,7 +838,6 @@ func TestHistogramWith2FiltersAgg(t *testing.T) {
 	[
 		{
 		  "refId": "A",
-		  "timeField": "t",
 		  "metrics": [{ "type": "count", "id": "1" }],
 		  "bucketAggs": [
 			{
@@ -906,8 +894,8 @@ func TestHistogramWith2FiltersAgg(t *testing.T) {
 	frames := result.response.Responses["A"].Frames
 	require.Len(t, frames, 2)
 	requireFrameLength(t, frames[0], 2)
-	// require.Equal(t, "@metric:cpu", frames[0].Name)
-	// require.Equal(t, "@metric:logins.count", frames[1].Name)
+	requireTimeSeriesName(t, "@metric:cpu", frames[0])
+	requireTimeSeriesName(t, "@metric:logins.count", frames[1])
 }
 
 func TestTrimEdges(t *testing.T) {
@@ -915,7 +903,6 @@ func TestTrimEdges(t *testing.T) {
 	[
 		{
 		  "refId": "A",
-		  "timeField": "t",
 		  "metrics": [
 			{ "type": "avg", "id": "1", "field": "@value" },
 			{ "type": "count", "id": "3" }
@@ -966,7 +953,6 @@ func TestTermsAggWithoutDateHistogram(t *testing.T) {
 	[
 		{
 		  "refId": "A",
-		  "timeField": "t",
 		  "metrics": [
 			{ "type": "avg", "id": "1", "field": "@value" },
 			{ "type": "count", "id": "3" }
@@ -1023,7 +1009,6 @@ func TestPercentilesWithoutDateHistogram(t *testing.T) {
 	[
 		{
 		  "refId": "A",
-		  "timeField": "t",
 		  "metrics": [
 			{
 			  "type": "percentiles",
@@ -1095,7 +1080,6 @@ func TestMultipleMetricsOfTheSameType(t *testing.T) {
 	[
 		{
 		  "refId": "A",
-		  "timeField": "t",
 		  "metrics": [
 			{ "type": "avg", "id": "1", "field": "test" },
 			{ "type": "avg", "id": "2", "field": "test2" }
@@ -1146,7 +1130,6 @@ func TestRawDocumentQuery(t *testing.T) {
 	[
 		{
 		  "refId": "A",
-		  "timeField": "t",
 		  "metrics": [{ "type": "raw_document", "id": "1" }],
 		  "bucketAggs": []
 		}
@@ -1182,24 +1165,23 @@ func TestRawDocumentQuery(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, result.response.Responses, 1)
-	// FIXME: the whole raw_document format is not implemented currently
-	// frames := result.response.Responses["A"].Frames
-	// require.Len(t, frames, 1)
-	// fields := frames[0].Fields
+	frames := result.response.Responses["A"].Frames
+	require.Len(t, frames, 1)
+	fields := frames[0].Fields
 
-	// require.Len(t, fields, 1)
-	// f := fields[0]
+	require.Len(t, fields, 1)
+	f := fields[0]
 
-	// require.Equal(t, data.FieldTypeJSON, f.Type())
-	// require.Equal(t, 2, f.Len())
+	require.Equal(t, data.FieldTypeNullableJSON, f.Type())
+	require.Equal(t, 2, f.Len())
 
-	// v := f.At(0).(json.RawMessage)
-	// var jsonData map[string]interface{}
-	// err = json.Unmarshal(v, &jsonData)
-	// require.NoError(t, err)
+	v := f.At(0).(*json.RawMessage)
+	var jsonData map[string]interface{}
+	err = json.Unmarshal(*v, &jsonData)
+	require.NoError(t, err)
 
-	// require.Equal(t, "asd", jsonData["sourceProp"])
-	// require.Equal(t, "field", jsonData["fieldProp"])
+	require.Equal(t, "asd", jsonData["sourceProp"])
+	require.Equal(t, "field", jsonData["fieldProp"])
 }
 
 func TestBucketScript(t *testing.T) {
@@ -1207,7 +1189,6 @@ func TestBucketScript(t *testing.T) {
 	[
 		{
 		  "refId": "A",
-		  "timeField": "t",
 		  "metrics": [
 			{ "id": "1", "type": "sum", "field": "@value" },
 			{ "id": "3", "type": "max", "field": "@value" },
@@ -1264,9 +1245,9 @@ func TestBucketScript(t *testing.T) {
 	frames := result.response.Responses["A"].Frames
 	require.Len(t, frames, 3)
 	requireFrameLength(t, frames[0], 2)
-	// require.Equal(t, "Sum @value", frames[0].Name)
-	// require.Equal(t, "Max @value", frames[1].Name)
-	// require.Equal(t, "Sum @value * Max @value", frames[2].Name)
+	requireTimeSeriesName(t, "Sum @value", frames[0])
+	requireTimeSeriesName(t, "Max @value", frames[1])
+	requireTimeSeriesName(t, "Sum @value * Max @value", frames[2])
 
 	requireNumberValue(t, 2, frames[0], 0)
 	requireNumberValue(t, 3, frames[1], 0)
@@ -1282,7 +1263,6 @@ func TestTwoBucketScripts(t *testing.T) {
 	[
 		{
 		  "refId": "A",
-		  "timeField": "t",
 		  "metrics": [
 			{ "id": "1", "type": "sum", "field": "@value" },
 			{ "id": "3", "type": "max", "field": "@value" },
@@ -1364,60 +1344,12 @@ func TestTwoBucketScripts(t *testing.T) {
 	requireFloatAt(t, 48.0, fields[4], 1)
 }
 
-func TestRawData(t *testing.T) {
-	query := []byte(`
-	[
-		{
-			"refId": "A",
-			"timeField": "t",
-			"metrics": [{ "type": "raw_data", "id": "1" }],
-			"bucketAggs": []
-		}
-	]
-	`)
-
-	response := []byte(`
-	{
-		"responses": [
-		  {
-			"hits": {
-			  "total": { "relation": "eq", "value": 1 },
-			  "hits": [
-				{
-				  "_id": "1",
-				  "_type": "_doc",
-				  "_index": "index",
-				  "_source": { "sourceProp": "asd" }
-				}
-			  ]
-			}
-		  }
-		]
-	}
-	`)
-
-	result, err := queryDataTest(query, response)
-	require.NoError(t, err)
-
-	require.Len(t, result.response.Responses, 1)
-	// frames := result.response.Responses["A"].Frames
-	// require.True(t, len(frames) > 0) // FIXME
-
-	// for _, field := range frames[0].Fields {
-	// 	trueValue := true
-	// 	filterableConfig := data.FieldConfig{Filterable: &trueValue}
-
-	// 	// we need to test that the only changed setting is `filterable`
-	// 	require.Equal(t, filterableConfig, *field.Config) // FIXME
-	// }
-}
-
-func TestLogsAndCount(t *testing.T) {
+func TestLogs(t *testing.T) {
 	query := []byte(`
 	[
 		{
 		  "refId": "A",
-		  "metrics": [{ "type": "count", "id": "1" }],
+		  "metrics": [{ "type": "logs"}],
 		  "bucketAggs": [
 			{
 			  "type": "date_histogram",
@@ -1426,8 +1358,7 @@ func TestLogsAndCount(t *testing.T) {
 			}
 		  ],
 		  "key": "Q-1561369883389-0.7611823271062786-0",
-		  "query": "hello AND message",
-		  "timeField": "@timestamp"
+		  "query": "hello AND message"
 		}
 	]
 `)
@@ -1436,14 +1367,7 @@ func TestLogsAndCount(t *testing.T) {
 	{
 		"responses": [
 		  {
-			"aggregations": {
-			  "2": {
-				"buckets": [
-				  { "doc_count": 10, "key": 1000 },
-				  { "doc_count": 15, "key": 2000 }
-				]
-			  }
-			},
+			"aggregations": {},
 			"hits": {
 			  "hits": [
 				{
@@ -1451,10 +1375,10 @@ func TestLogsAndCount(t *testing.T) {
 				  "_type": "_doc",
 				  "_index": "mock-index",
 				  "_source": {
-					"@timestamp": "2019-06-24T09:51:19.765Z",
+					"testtime": "2019-06-24T09:51:19.765Z",
 					"host": "djisaodjsoad",
 					"number": 1,
-					"message": "hello, i am a message",
+					"line": "hello, i am a message",
 					"level": "debug",
 					"fields": { "lvl": "debug" }
 				  },
@@ -1469,10 +1393,10 @@ func TestLogsAndCount(t *testing.T) {
 				  "_type": "_doc",
 				  "_index": "mock-index",
 				  "_source": {
-					"@timestamp": "2019-06-24T09:52:19.765Z",
+					"testtime": "2019-06-24T09:52:19.765Z",
 					"host": "dsalkdakdop",
 					"number": 2,
-					"message": "hello, i am also message",
+					"line": "hello, i am also message",
 					"level": "error",
 					"fields": { "lvl": "info" }
 				  },
@@ -1490,96 +1414,78 @@ func TestLogsAndCount(t *testing.T) {
 `)
 
 	t.Run("response", func(t *testing.T) {
-		// FIXME: config datasource with messageField=<unset>, levelField=<unset>
 		result, err := queryDataTest(query, response)
 		require.NoError(t, err)
 
 		require.Len(t, result.response.Responses, 1)
 		frames := result.response.Responses["A"].Frames
-		// require.Len(t, frames, 2) // FIXME
+		require.Len(t, frames, 1)
 
-		// logsFrame := frames[0]
+		logsFrame := frames[0]
 
-		// m := logsFrame.Meta
-		// require.Equal(t, "['hello', 'message']", m.SearchWords) // FIXME
-		// require.Equal(t, data.VisTypeLogs, m.PreferredVisualization) // FIXME
+		meta := logsFrame.Meta
+		require.Equal(t, map[string]interface{}{"searchWords": []string{"hello", "message"}}, meta.Custom)
+		require.Equal(t, data.VisTypeLogs, string(meta.PreferredVisualization))
 
-		// logsFieldMap := make(map[string]*data.Field)
-		// for _, field := range logsFrame.Fields {
-		// 	logsFieldMap[field.Name] = field
-		// }
-
-		// require.Contains(t, logsFieldMap, "@timestamp")
-		// require.Equal(t, data.FieldTypeTime, logsFieldMap["@timestamp"].Type())
-
-		// require.Contains(t, logsFieldMap, "host")
-		// require.Equal(t, data.FieldTypeString, logsFieldMap["host"].Type())
-
-		// require.Contains(t, logsFieldMap, "message")
-		// require.Equal(t, data.FieldTypeString, logsFieldMap["message"].Type())
-
-		// require.Contains(t, logsFieldMap, "number")
-		// require.Equal(t, data.FieldTypeNullableFloat64, logsFieldMap["number"].Type())
-
-		// requireStringAt(t, "fdsfs", logsFieldMap["_id"], 0)
-		// requireStringAt(t, "kdospaidopa", logsFieldMap["_id"], 1)
-		// requireStringAt(t, "_doc", logsFieldMap["_type"], 0)
-		// requireStringAt(t, "_doc", logsFieldMap["_type"], 1)
-		// requireStringAt(t, "mock-index", logsFieldMap["_index"], 0)
-		// requireStringAt(t, "mock-index", logsFieldMap["_index"], 1)
-
-		// actualJson1 := logsFieldMap["_source"].At(0).(*json.RawMessage)
-		// actualJson2 := logsFieldMap["_source"].At(1).(*json.RawMessage)
-
-		// expectedJson1 := []byte(`
-		// {
-		// 	"@timestamp": "2019-06-24T09:51:19.765Z",
-		// 	"host": "djisaodjsoad",
-		// 	"number": 1,
-		// 	"message": "hello, i am a message",
-		// 	"level": "debug",
-		// 	"fields.lvl": "debug"
-		// }
-		// `)
-
-		// expectedJson2 := []byte(`
-		// {
-		// 	"@timestamp": "2019-06-24T09:52:19.765Z",
-		// 	"host": "dsalkdakdop",
-		// 	"number": 2,
-		// 	"message": "hello, i am also message",
-		// 	"level": "error",
-		// 	"fields.lvl": "info"
-		// }
-		// `)
-
-		// require.Equal(t, expectedJson1, actualJson1)
-		// require.Equal(t, expectedJson2, actualJson2)
-
-		histogramFrame := frames[len(frames)-1] // the "last" frame
-
-		histFieldMap := make(map[string]*data.Field)
-		for _, field := range histogramFrame.Fields {
-			histFieldMap[field.Name] = field
+		logsFieldMap := make(map[string]*data.Field)
+		for _, field := range logsFrame.Fields {
+			logsFieldMap[field.Name] = field
 		}
 
-		// FIXME: the go-version uses lowercase-names, `time` and `value`
-		// t1 := histFieldMap["Time"].At(0).(time.Time)
-		// t2 := histFieldMap["Time"].At(1).(time.Time)
+		require.Contains(t, logsFieldMap, "testtime")
+		require.Equal(t, data.FieldTypeNullableTime, logsFieldMap["testtime"].Type())
 
-		// v1 := histFieldMap["Value"].At(0).(*float64)
-		// v2 := histFieldMap["Value"].At(1).(*float64)
+		require.Contains(t, logsFieldMap, "host")
+		require.Equal(t, data.FieldTypeNullableString, logsFieldMap["host"].Type())
 
-		// testData := make(map[int64]float64)
-		// testData[(t1).UnixMilli()] = *v1
-		// testData[(t2).UnixMilli()] = *v2
+		require.Contains(t, logsFieldMap, "line")
+		require.Equal(t, data.FieldTypeNullableString, logsFieldMap["line"].Type())
 
-		// require.Equal(t, 10.0, testData[1000])
-		// require.Equal(t, 15.0, testData[2000])
+		require.Contains(t, logsFieldMap, "number")
+		require.Equal(t, data.FieldTypeNullableFloat64, logsFieldMap["number"].Type())
+
+		require.Contains(t, logsFieldMap, "_source")
+		require.Equal(t, data.FieldTypeNullableJSON, logsFieldMap["_source"].Type())
+
+		requireStringAt(t, "fdsfs", logsFieldMap["_id"], 0)
+		requireStringAt(t, "kdospaidopa", logsFieldMap["_id"], 1)
+		requireStringAt(t, "_doc", logsFieldMap["_type"], 0)
+		requireStringAt(t, "_doc", logsFieldMap["_type"], 1)
+		requireStringAt(t, "mock-index", logsFieldMap["_index"], 0)
+		requireStringAt(t, "mock-index", logsFieldMap["_index"], 1)
+
+		actualJson1, err := json.Marshal(logsFieldMap["_source"].At(0).(*json.RawMessage))
+		require.NoError(t, err)
+		actualJson2, err := json.Marshal(logsFieldMap["_source"].At(1).(*json.RawMessage))
+		require.NoError(t, err)
+
+		expectedJson1 := `
+		{
+			"fields.lvl": "debug",
+			"host": "djisaodjsoad",
+			"level": "debug",
+			"line": "hello, i am a message",
+			"number": 1,
+			"testtime": "2019-06-24T09:51:19.765Z",
+			"line": "hello, i am a message"
+		}
+		`
+
+		expectedJson2 := `
+		{
+			"testtime": "2019-06-24T09:52:19.765Z",
+			"host": "dsalkdakdop",
+			"number": 2,
+			"line": "hello, i am also message",
+			"level": "error",
+			"fields.lvl": "info"
+		}`
+
+		require.JSONEq(t, expectedJson1, string(actualJson1))
+		require.JSONEq(t, expectedJson2, string(actualJson2))
 	})
 
 	t.Run("level field", func(t *testing.T) {
-		// FIXME: config datasource with messageField=<unset>, levelField="level"
 		result, err := queryDataTest(query, response)
 		require.NoError(t, err)
 
@@ -1593,33 +1499,11 @@ func TestLogsAndCount(t *testing.T) {
 			fieldMap[field.Name] = field
 		}
 
-		// require.Contains(t, fieldMap, "level") // FIXME
-		// field := fieldMap["level"]
+		require.Contains(t, fieldMap, "level")
+		field := fieldMap["level"]
 
-		// requireStringAt(t, "debug", field, 0)
-		// requireStringAt(t, "error", field, 1)
-	})
-
-	t.Run("level field remap", func(t *testing.T) {
-		// FIXME: config datasource with messageField=<unset>, levelField="fields.lvl"
-		result, err := queryDataTest(query, response)
-		require.NoError(t, err)
-
-		require.Len(t, result.response.Responses, 1)
-		frames := result.response.Responses["A"].Frames
-		require.True(t, len(frames) > 0)
-
-		requireFrameLength(t, frames[0], 2)
-		fieldMap := make(map[string]*data.Field)
-		for _, field := range frames[0].Fields {
-			fieldMap[field.Name] = field
-		}
-
-		// require.Contains(t, fieldMap, "level") // FIXME
-		// field := fieldMap["level"]
-
-		// requireStringAt(t, "debug", field, 0)
-		// requireStringAt(t, "info", field, 1)
+		requireStringAt(t, "debug", field, 0)
+		requireStringAt(t, "error", field, 1)
 	})
 }
 
@@ -1629,16 +1513,9 @@ func TestLogsEmptyResponse(t *testing.T) {
 		{
 		  "refId": "A",
 		  "metrics": [{ "type": "logs", "id": "2" }],
-		  "bucketAggs": [
-			{
-			  "type": "date_histogram",
-			  "settings": { "interval": "auto" },
-			  "id": "1"
-			}
-		  ],
+		  "bucketAggs": [],
 		  "key": "Q-1561369883389-0.7611823271062786-0",
-		  "query": "hello AND message",
-		  "timeField": "@timestamp"
+		  "query": "hello AND message"
 		}
 	]
 	`)
@@ -1648,38 +1525,17 @@ func TestLogsEmptyResponse(t *testing.T) {
 		"responses": [
 		  {
 			"hits": { "hits": [] },
-			"aggregations": {
-			  "1": {
-				"buckets": [
-				  {
-					"key_as_string": "1633676760000",
-					"key": 1633676760000,
-					"doc_count": 0
-				  },
-				  {
-					"key_as_string": "1633676770000",
-					"key": 1633676770000,
-					"doc_count": 0
-				  },
-				  {
-					"key_as_string": "1633676780000",
-					"key": 1633676780000,
-					"doc_count": 0
-				  }
-				]
-			  }
-			},
+			"aggregations": {},
 			"status": 200
 		  }
 		]
 	}
 	`)
 
-	// FIXME: config datasource with messageField="message", levelField="level"
 	result, err := queryDataTest(query, response)
 	require.NoError(t, err)
 
 	require.Len(t, result.response.Responses, 1)
-	// frames := result.response.Responses["A"].Frames
-	// require.Len(t, frames, 2) // FIXME
+	frames := result.response.Responses["A"].Frames
+	require.Len(t, frames, 1)
 }

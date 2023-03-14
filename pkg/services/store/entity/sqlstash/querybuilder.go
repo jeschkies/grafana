@@ -5,7 +5,7 @@ import "strings"
 type selectQuery struct {
 	fields   []string // SELECT xyz
 	from     string   // FROM object
-	limit    int
+	limit    int64
 	oneExtra bool
 
 	where []string
@@ -15,6 +15,11 @@ type selectQuery struct {
 func (q *selectQuery) addWhere(f string, val interface{}) {
 	q.args = append(q.args, val)
 	q.where = append(q.where, f+"=?")
+}
+
+func (q *selectQuery) addWhereInSubquery(f string, subquery string, subqueryArgs []interface{}) {
+	q.args = append(q.args, subqueryArgs...)
+	q.where = append(q.where, f+" IN ("+subquery+")")
 }
 
 func (q *selectQuery) addWhereIn(f string, vals []string) {

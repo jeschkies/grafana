@@ -1,7 +1,7 @@
 import { e2e } from '@grafana/e2e';
+import { GrafanaBootConfig } from '@grafana/runtime';
 
 const PAGE_UNDER_TEST = '-Y-tnEDWk/templating-nested-template-variables';
-const flakyTimeout = 5000;
 
 describe('Variables - Set options from ui', () => {
   it('clicking a value that is not part of dependents options should change these to All', () => {
@@ -12,11 +12,17 @@ describe('Variables - Set options from ui', () => {
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownOptionTexts('A').should('be.visible').click();
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownOptionTexts('B').should('be.visible').click();
 
-    e2e.components.PageToolbar.container().click();
+    e2e()
+      .window()
+      .then((win: Cypress.AUTWindow & { grafanaBootData: GrafanaBootConfig['bootData'] }) => {
+        if (win.grafanaBootData.settings.featureToggles.topnav) {
+          e2e.components.NavToolbar.container().click();
+        } else {
+          e2e.components.PageToolbar.container().click();
+        }
+      });
 
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownValueLinkTexts('B').scrollIntoView().should('be.visible');
-
-    e2e().wait(flakyTimeout);
 
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownValueLinkTexts('All')
       .should('have.length', 2)
@@ -27,7 +33,7 @@ describe('Variables - Set options from ui', () => {
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownDropDown()
       .should('be.visible')
       .within(() => {
-        e2e().get('.variable-option').should('have.length', 9);
+        e2e.components.Variables.variableOption().should('have.length', 9);
       });
 
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownOptionTexts('All').should('be.visible');
@@ -35,14 +41,12 @@ describe('Variables - Set options from ui', () => {
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownOptionTexts('BB').should('be.visible');
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownOptionTexts('BC').should('be.visible');
 
-    e2e().wait(flakyTimeout);
-
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownValueLinkTexts('All').should('be.visible').click();
 
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownDropDown()
       .should('be.visible')
       .within(() => {
-        e2e().get('.variable-option').should('have.length', 65);
+        e2e.components.Variables.variableOption().should('have.length', 65);
       });
 
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownOptionTexts('All').should('be.visible');
@@ -64,10 +68,17 @@ describe('Variables - Set options from ui', () => {
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownValueLinkTexts('A').should('be.visible').click();
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownOptionTexts('B').should('be.visible').click();
 
-    e2e.components.PageToolbar.container().click();
+    e2e()
+      .window()
+      .then((win: Cypress.AUTWindow & { grafanaBootData: GrafanaBootConfig['bootData'] }) => {
+        if (win.grafanaBootData.settings.featureToggles.topnav) {
+          e2e.components.NavToolbar.container().click();
+        } else {
+          e2e.components.PageToolbar.container().click();
+        }
+      });
 
     e2e().wait('@query');
-    e2e().wait(500);
 
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownValueLinkTexts('A + B').scrollIntoView().should('be.visible');
 
@@ -78,7 +89,7 @@ describe('Variables - Set options from ui', () => {
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownDropDown()
       .should('be.visible')
       .within(() => {
-        e2e().get('.variable-option').should('have.length', 17);
+        e2e.components.Variables.variableOption().should('have.length', 17);
       });
 
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownOptionTexts('All').should('be.visible');
@@ -94,7 +105,7 @@ describe('Variables - Set options from ui', () => {
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownDropDown()
       .should('be.visible')
       .within(() => {
-        e2e().get('.variable-option').should('have.length', 9);
+        e2e.components.Variables.variableOption().should('have.length', 9);
       });
 
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownOptionTexts('All').should('be.visible');
@@ -115,10 +126,17 @@ describe('Variables - Set options from ui', () => {
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownValueLinkTexts('A + B').should('be.visible').click();
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownOptionTexts('A').should('be.visible').click();
 
-    e2e.components.PageToolbar.container().click();
+    e2e()
+      .window()
+      .then((win: Cypress.AUTWindow & { grafanaBootData: GrafanaBootConfig['bootData'] }) => {
+        if (win.grafanaBootData.settings.featureToggles.topnav) {
+          e2e.components.NavToolbar.container().click();
+        } else {
+          e2e.components.PageToolbar.container().click();
+        }
+      });
 
     e2e().wait('@query');
-    e2e().wait(500);
 
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownValueLinkTexts('B').scrollIntoView().should('be.visible');
 
@@ -129,7 +147,7 @@ describe('Variables - Set options from ui', () => {
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownDropDown()
       .should('be.visible')
       .within(() => {
-        e2e().get('.variable-option').should('have.length', 9);
+        e2e.components.Variables.variableOption().should('have.length', 9);
       });
 
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownOptionTexts('All').should('be.visible');
@@ -142,7 +160,7 @@ describe('Variables - Set options from ui', () => {
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownDropDown()
       .should('be.visible')
       .within(() => {
-        e2e().get('.variable-option').should('have.length', 9);
+        e2e.components.Variables.variableOption().should('have.length', 9);
       });
 
     e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownOptionTexts('BBA').should('be.visible');

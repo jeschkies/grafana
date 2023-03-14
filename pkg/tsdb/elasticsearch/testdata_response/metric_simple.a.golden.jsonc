@@ -1,10 +1,16 @@
 //  🌟 This was machine generated.  Do not edit. 🌟
 //  
-//  Frame[0] 
-//  Name: 
+//  Frame[0] {
+//      "type": "timeseries-multi",
+//      "typeVersion": [
+//          0,
+//          0
+//      ]
+//  }
+//  Name: val3
 //  Dimensions: 2 Fields by 4 Rows
 //  +-------------------------------+--------------------+
-//  | Name: time                    | Name: value        |
+//  | Name: Time                    | Name: Value        |
 //  | Labels:                       | Labels: label=val3 |
 //  | Type: []time.Time             | Type: []*float64   |
 //  +-------------------------------+--------------------+
@@ -16,11 +22,17 @@
 //  
 //  
 //  
-//  Frame[1] 
-//  Name: 
+//  Frame[1] {
+//      "type": "timeseries-multi",
+//      "typeVersion": [
+//          0,
+//          0
+//      ]
+//  }
+//  Name: val2
 //  Dimensions: 2 Fields by 4 Rows
 //  +-------------------------------+--------------------+
-//  | Name: time                    | Name: value        |
+//  | Name: Time                    | Name: Value        |
 //  | Labels:                       | Labels: label=val2 |
 //  | Type: []time.Time             | Type: []*float64   |
 //  +-------------------------------+--------------------+
@@ -32,11 +44,17 @@
 //  
 //  
 //  
-//  Frame[2] 
-//  Name: 
+//  Frame[2] {
+//      "type": "timeseries-multi",
+//      "typeVersion": [
+//          0,
+//          0
+//      ]
+//  }
+//  Name: val1
 //  Dimensions: 2 Fields by 4 Rows
 //  +-------------------------------+--------------------+
-//  | Name: time                    | Name: value        |
+//  | Name: Time                    | Name: Value        |
 //  | Labels:                       | Labels: label=val1 |
 //  | Type: []time.Time             | Type: []*float64   |
 //  +-------------------------------+--------------------+
@@ -53,19 +71,24 @@
   "frames": [
     {
       "schema": {
+        "name": "val3",
+        "meta": {
+          "type": "timeseries-multi",
+          "typeVersion": [
+            0,
+            0
+          ]
+        },
         "fields": [
           {
-            "name": "time",
+            "name": "Time",
             "type": "time",
             "typeInfo": {
               "frame": "time.Time"
-            },
-            "config": {
-              "displayNameFromDS": "val3"
             }
           },
           {
-            "name": "value",
+            "name": "Value",
             "type": "number",
             "typeInfo": {
               "frame": "float64",
@@ -73,9 +96,6 @@
             },
             "labels": {
               "label": "val3"
-            },
-            "config": {
-              "displayNameFromDS": "val3"
             }
           }
         ]
@@ -99,19 +119,24 @@
     },
     {
       "schema": {
+        "name": "val2",
+        "meta": {
+          "type": "timeseries-multi",
+          "typeVersion": [
+            0,
+            0
+          ]
+        },
         "fields": [
           {
-            "name": "time",
+            "name": "Time",
             "type": "time",
             "typeInfo": {
               "frame": "time.Time"
-            },
-            "config": {
-              "displayNameFromDS": "val2"
             }
           },
           {
-            "name": "value",
+            "name": "Value",
             "type": "number",
             "typeInfo": {
               "frame": "float64",
@@ -119,9 +144,6 @@
             },
             "labels": {
               "label": "val2"
-            },
-            "config": {
-              "displayNameFromDS": "val2"
             }
           }
         ]
@@ -145,19 +167,24 @@
     },
     {
       "schema": {
+        "name": "val1",
+        "meta": {
+          "type": "timeseries-multi",
+          "typeVersion": [
+            0,
+            0
+          ]
+        },
         "fields": [
           {
-            "name": "time",
+            "name": "Time",
             "type": "time",
             "typeInfo": {
               "frame": "time.Time"
-            },
-            "config": {
-              "displayNameFromDS": "val1"
             }
           },
           {
-            "name": "value",
+            "name": "Value",
             "type": "number",
             "typeInfo": {
               "frame": "float64",
@@ -165,9 +192,6 @@
             },
             "labels": {
               "label": "val1"
-            },
-            "config": {
-              "displayNameFromDS": "val1"
             }
           }
         ]

@@ -32,7 +32,7 @@ import { getStackingGroups } from '@grafana/ui/src/components/uPlot/utils';
 import { findField } from 'app/features/dimensions';
 
 import { BarsOptions, getConfig } from './bars';
-import { PanelFieldConfig, PanelOptions, defaultPanelFieldConfig } from './models.gen';
+import { PanelFieldConfig, PanelOptions, defaultPanelFieldConfig } from './panelcfg.gen';
 import { BarChartDisplayValues, BarChartDisplayWarning } from './types';
 
 function getBarCharScaleOrientation(orientation: VizOrientation) {
@@ -55,7 +55,7 @@ function getBarCharScaleOrientation(orientation: VizOrientation) {
 
 export interface BarChartOptionsEX extends PanelOptions {
   rawValue: (seriesIdx: number, valueIdx: number) => number | null;
-  getColor?: (seriesIdx: number, valueIdx: number, value: any) => string | null;
+  getColor?: (seriesIdx: number, valueIdx: number, value: unknown) => string | null;
   timeZone?: TimeZone;
   fillOpacity?: number;
 }
@@ -79,14 +79,15 @@ export const preparePlotConfigBuilder: UPlotConfigPrepFn<BarChartOptionsEX> = ({
   xTickLabelSpacing = 0,
   legend,
   timeZone,
+  fullHighlight,
 }) => {
   const builder = new UPlotConfigBuilder();
 
-  const formatValue = (seriesIdx: number, value: any) => {
+  const formatValue = (seriesIdx: number, value: unknown) => {
     return formattedValueToString(frame.fields[seriesIdx].display!(value));
   };
 
-  const formatShortValue = (seriesIdx: number, value: any) => {
+  const formatShortValue = (seriesIdx: number, value: unknown) => {
     return shortenValue(formatValue(seriesIdx, value), xTickLabelMaxLength);
   };
 
@@ -118,6 +119,7 @@ export const preparePlotConfigBuilder: UPlotConfigPrepFn<BarChartOptionsEX> = ({
     xSpacing: xTickLabelSpacing,
     xTimeAuto: frame.fields[0]?.type === FieldType.time && !frame.fields[0].config.unit?.startsWith('time:'),
     negY: frame.fields.map((f) => f.config.custom?.transform === GraphTransform.NegativeY),
+    fullHighlight,
   };
 
   const config = getConfig(opts, theme);
@@ -314,13 +316,13 @@ function getRotationPadding(
 ): Padding {
   const values = frame.fields[0].values;
   const fontSize = UPLOT_AXIS_FONT_SIZE;
-  const displayProcessor = frame.fields[0].display ?? ((v) => v);
+  const displayProcessor = frame.fields[0].display;
+  const getProcessedValue = (i: number) => {
+    return displayProcessor ? displayProcessor(values.get(i)) : values.get(i);
+  };
   let maxLength = 0;
   for (let i = 0; i < values.length; i++) {
-    let size = measureText(
-      shortenValue(formattedValueToString(displayProcessor(values.get(i))), valueMaxLength),
-      fontSize
-    );
+    let size = measureText(shortenValue(formattedValueToString(getProcessedValue(i)), valueMaxLength), fontSize);
     maxLength = size.width > maxLength ? size.width : maxLength;
   }
 
@@ -329,7 +331,7 @@ function getRotationPadding(
     rotateLabel > 0
       ? Math.cos((rotateLabel * Math.PI) / 180) *
         measureText(
-          shortenValue(formattedValueToString(displayProcessor(values.get(values.length - 1))), valueMaxLength),
+          shortenValue(formattedValueToString(getProcessedValue(values.length - 1)), valueMaxLength),
           fontSize
         ).width
       : 0;
@@ -338,8 +340,7 @@ function getRotationPadding(
   const paddingLeft =
     rotateLabel < 0
       ? Math.cos((rotateLabel * -1 * Math.PI) / 180) *
-        measureText(shortenValue(formattedValueToString(displayProcessor(values.get(0))), valueMaxLength), fontSize)
-          .width
+        measureText(shortenValue(formattedValueToString(getProcessedValue(0)), valueMaxLength), fontSize).width
       : 0;
 
   // Add padding to the bottom to avoid clipping the rotated labels.
@@ -488,6 +489,27 @@ export function prepareBarChartDisplayValues(
     );
   }
 
+  let legendFields: Field[] = fields;
+  if (options.stacking === StackingMode.Percent) {
+    legendFields = fields.map((field) => {
+      const alignedFrameField = frame.fields.find((f) => f.name === field.name)!;
+
+      const copy = {
+        ...field,
+        config: {
+          ...alignedFrameField.config,
+        },
+        values: field.values,
+      };
+
+      copy.display = getDisplayProcessor({ field: copy, theme });
+
+      return copy;
+    });
+
+    legendFields.unshift(firstField);
+  }
+
   // String field is first
   fields.unshift(firstField);
 
@@ -500,6 +522,10 @@ export function prepareBarChartDisplayValues(
         fields: fields, // ideally: fields.filter((f) => !Boolean(f.config.custom?.hideFrom?.viz)),
       },
     ],
+    legend: {
+      fields: legendFields,
+      length: firstField.values.length,
+    },
   };
 }
 

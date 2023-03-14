@@ -17,7 +17,7 @@ interface Props {
   secondaryPaneStyle?: React.CSSProperties;
 }
 
-export class SplitPaneWrapper extends PureComponent<Props> {
+export class SplitPaneWrapper extends PureComponent<React.PropsWithChildren<Props>> {
   //requestAnimationFrame reference
   rafToken: MutableRefObject<number | null> = createRef();
 
@@ -141,12 +141,6 @@ const getStyles = (theme: GrafanaTheme2, hasSplit: boolean) => {
   `;
 
   return {
-    singleLeftPane: css`
-      height: 100%;
-      position: absolute;
-      overflow: hidden;
-      width: 100%;
-    `,
     resizerV: cx(
       resizer,
       css`

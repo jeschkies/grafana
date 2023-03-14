@@ -1,10 +1,11 @@
 import { css } from '@emotion/css';
-import React, { FC } from 'react';
+import React from 'react';
 
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
 import { CombinedRule } from 'app/types/unified-alerting';
 
+import { useCleanAnnotations } from '../../utils/annotations';
 import { isRecordingRulerRule } from '../../utils/rules';
 import { AlertLabels } from '../AlertLabels';
 import { DetailsField } from '../DetailsField';
@@ -24,17 +25,17 @@ interface Props {
 // We don't want to paginate the instances list on the alert list page
 const INSTANCES_DISPLAY_LIMIT = 15;
 
-export const RuleDetails: FC<Props> = ({ rule }) => {
+export const RuleDetails = ({ rule }: Props) => {
   const styles = useStyles2(getStyles);
   const {
     namespace: { rulesSource },
   } = rule;
 
-  const annotations = Object.entries(rule.annotations).filter(([_, value]) => !!value.trim());
+  const annotations = useCleanAnnotations(rule.annotations);
 
   return (
     <div>
-      <RuleDetailsActionButtons rule={rule} rulesSource={rulesSource} />
+      <RuleDetailsActionButtons rule={rule} rulesSource={rulesSource} isViewMode={false} />
       <div className={styles.wrapper}>
         <div className={styles.leftSide}>
           {<EvaluationBehaviorSummary rule={rule} />}

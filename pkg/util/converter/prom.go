@@ -26,8 +26,8 @@ type Options struct {
 }
 
 // ReadPrometheusStyleResult will read results from a prometheus or loki server and return data frames
-func ReadPrometheusStyleResult(iter *jsoniter.Iterator, opt Options) *backend.DataResponse {
-	var rsp *backend.DataResponse
+func ReadPrometheusStyleResult(iter *jsoniter.Iterator, opt Options) backend.DataResponse {
+	var rsp backend.DataResponse
 	status := "unknown"
 	errorType := ""
 	err := ""
@@ -57,7 +57,7 @@ func ReadPrometheusStyleResult(iter *jsoniter.Iterator, opt Options) *backend.Da
 	}
 
 	if status == "error" {
-		return &backend.DataResponse{
+		return backend.DataResponse{
 			Error: fmt.Errorf("%s: %s", errorType, err),
 		}
 	}
@@ -93,20 +93,20 @@ func readWarnings(iter *jsoniter.Iterator) []data.Notice {
 	return warnings
 }
 
-func readPrometheusData(iter *jsoniter.Iterator, opt Options) *backend.DataResponse {
+func readPrometheusData(iter *jsoniter.Iterator, opt Options) backend.DataResponse {
 	t := iter.WhatIsNext()
 	if t == jsoniter.ArrayValue {
 		return readArrayData(iter)
 	}
 
 	if t != jsoniter.ObjectValue {
-		return &backend.DataResponse{
+		return backend.DataResponse{
 			Error: fmt.Errorf("expected object type"),
 		}
 	}
 
 	resultType := ""
-	var rsp *backend.DataResponse
+	var rsp backend.DataResponse
 
 	for l1Field := iter.ReadObject(); l1Field != ""; l1Field = iter.ReadObject() {
 		switch l1Field {
@@ -137,7 +137,7 @@ func readPrometheusData(iter *jsoniter.Iterator, opt Options) *backend.DataRespo
 				rsp = readTrace(iter)
 			default:
 				iter.Skip()
-				rsp = &backend.DataResponse{
+				rsp = backend.DataResponse{
 					Error: fmt.Errorf("unknown result type: %s", resultType),
 				}
 			}
@@ -165,11 +165,11 @@ func readPrometheusData(iter *jsoniter.Iterator, opt Options) *backend.DataRespo
 }
 
 // will return strings or exemplars
-func readArrayData(iter *jsoniter.Iterator) *backend.DataResponse {
+func readArrayData(iter *jsoniter.Iterator) backend.DataResponse {
 	lookup := make(map[string]*data.Field)
 
 	var labelFrame *data.Frame
-	rsp := &backend.DataResponse{}
+	rsp := backend.DataResponse{}
 	stringField := data.NewFieldFromFieldType(data.FieldTypeString, 0)
 	stringField.Name = "Value"
 	for iter.ReadArray() {
@@ -231,8 +231,8 @@ func readArrayData(iter *jsoniter.Iterator) *backend.DataResponse {
 }
 
 // For consistent ordering read values to an array not a map
-func readLabelsAsPairs(iter *jsoniter.Iterator) [][2]string {
-	pairs := make([][2]string, 0, 10)
+func readLabelsAsPairs(iter *jsoniter.Iterator, pairs [][2]string) [][2]string {
+	pairs = pairs[:0]
 	for k := iter.ReadObject(); k != ""; k = iter.ReadObject() {
 		pairs = append(pairs, [2]string{k, iter.ReadString()})
 	}
@@ -273,7 +273,7 @@ func readLabelsOrExemplars(iter *jsoniter.Iterator) (*data.Frame, [][2]string) {
 
 					case "labels":
 						max := 0
-						for _, pair := range readLabelsAsPairs(iter) {
+						for _, pair := range readLabelsAsPairs(iter, pairs) {
 							k := pair[0]
 							v := pair[1]
 							f, ok := lookup[k]
@@ -308,6 +308,7 @@ func readLabelsOrExemplars(iter *jsoniter.Iterator) (*data.Frame, [][2]string) {
 			}
 		default:
 			v := fmt.Sprintf("%v", iter.Read())
+			pairs = pairs[:0]
 			pairs = append(pairs, [2]string{l1Field, v})
 		}
 	}
@@ -315,7 +316,7 @@ func readLabelsOrExemplars(iter *jsoniter.Iterator) (*data.Frame, [][2]string) {
 	return frame, pairs
 }
 
-func readString(iter *jsoniter.Iterator) *backend.DataResponse {
+func readString(iter *jsoniter.Iterator) backend.DataResponse {
 	timeField := data.NewFieldFromFieldType(data.FieldTypeTime, 0)
 	timeField.Name = data.TimeSeriesTimeFieldName
 	valueField := data.NewFieldFromFieldType(data.FieldTypeString, 0)
@@ -334,16 +335,16 @@ func readString(iter *jsoniter.Iterator) *backend.DataResponse {
 
 	frame := data.NewFrame("", timeField, valueField)
 	frame.Meta = &data.FrameMeta{
-		Type:   data.FrameTypeTimeSeriesMany,
+		Type:   data.FrameTypeTimeSeriesMulti,
 		Custom: resultTypeToCustomMeta("string"),
 	}
 
-	return &backend.DataResponse{
+	return backend.DataResponse{
 		Frames: []*data.Frame{frame},
 	}
 }
 
-func readScalar(iter *jsoniter.Iterator) *backend.DataResponse {
+func readScalar(iter *jsoniter.Iterator) backend.DataResponse {
 	timeField := data.NewFieldFromFieldType(data.FieldTypeTime, 0)
 	timeField.Name = data.TimeSeriesTimeFieldName
 	valueField := data.NewFieldFromFieldType(data.FieldTypeFloat64, 0)
@@ -358,16 +359,16 @@ func readScalar(iter *jsoniter.Iterator) *backend.DataResponse {
 
 	frame := data.NewFrame("", timeField, valueField)
 	frame.Meta = &data.FrameMeta{
-		Type:   data.FrameTypeTimeSeriesMany,
+		Type:   data.FrameTypeTimeSeriesMulti,
 		Custom: resultTypeToCustomMeta("scalar"),
 	}
 
-	return &backend.DataResponse{
+	return backend.DataResponse{
 		Frames: []*data.Frame{frame},
 	}
 }
 
-func readMatrixOrVectorWide(iter *jsoniter.Iterator, resultType string) *backend.DataResponse {
+func readMatrixOrVectorWide(iter *jsoniter.Iterator, resultType string) backend.DataResponse {
 	rowIdx := 0
 	timeMap := map[int64]int{}
 	timeField := data.NewFieldFromFieldType(data.FieldTypeTime, 0)
@@ -377,7 +378,7 @@ func readMatrixOrVectorWide(iter *jsoniter.Iterator, resultType string) *backend
 		Type:   data.FrameTypeTimeSeriesWide,
 		Custom: resultTypeToCustomMeta(resultType),
 	}
-	rsp := &backend.DataResponse{
+	rsp := backend.DataResponse{
 		Frames: []*data.Frame{},
 	}
 
@@ -475,8 +476,8 @@ func addValuePairToFrame(frame *data.Frame, timeMap map[int64]int, rowIdx int, i
 	return timeMap, rowIdx
 }
 
-func readMatrixOrVectorMulti(iter *jsoniter.Iterator, resultType string) *backend.DataResponse {
-	rsp := &backend.DataResponse{}
+func readMatrixOrVectorMulti(iter *jsoniter.Iterator, resultType string) backend.DataResponse {
+	rsp := backend.DataResponse{}
 
 	for iter.ReadArray() {
 		timeField := data.NewFieldFromFieldType(data.FieldTypeTime, 0)
@@ -548,7 +549,7 @@ func readMatrixOrVectorMulti(iter *jsoniter.Iterator, resultType string) *backen
 		} else {
 			frame := data.NewFrame("", timeField, valueField)
 			frame.Meta = &data.FrameMeta{
-				Type:   data.FrameTypeTimeSeriesMany,
+				Type:   data.FrameTypeTimeSeriesMulti,
 				Custom: resultTypeToCustomMeta(resultType),
 			}
 			rsp.Frames = append(rsp.Frames, frame)
@@ -691,8 +692,8 @@ func appendValueFromString(iter *jsoniter.Iterator, field *data.Field) error {
 	return nil
 }
 
-func readStream(iter *jsoniter.Iterator) *backend.DataResponse {
-	rsp := &backend.DataResponse{}
+func readStream(iter *jsoniter.Iterator) backend.DataResponse {
+	rsp := backend.DataResponse{}
 
 	labelsField := data.NewFieldFromFieldType(data.FieldTypeJSON, 0)
 	labelsField.Name = "__labels" // avoid automatically spreading this by labels
@@ -710,7 +711,7 @@ func readStream(iter *jsoniter.Iterator) *backend.DataResponse {
 	labels := data.Labels{}
 	labelJson, err := labelsToRawJson(labels)
 	if err != nil {
-		return &backend.DataResponse{Error: err}
+		return backend.DataResponse{Error: err}
 	}
 
 	for iter.ReadArray() {
@@ -723,7 +724,7 @@ func readStream(iter *jsoniter.Iterator) *backend.DataResponse {
 				iter.ReadVal(&labels)
 				labelJson, err = labelsToRawJson(labels)
 				if err != nil {
-					return &backend.DataResponse{Error: err}
+					return backend.DataResponse{Error: err}
 				}
 
 			case "values":

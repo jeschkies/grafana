@@ -1,4 +1,4 @@
-import React, { FC, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { SelectableValue } from '@grafana/data';
 import { Input, Select } from '@grafana/ui';
@@ -18,7 +18,7 @@ interface Props {
   getOptionLabel?: ((item: SelectableValue<string>) => React.ReactNode) | undefined;
 }
 
-export const SelectWithAdd: FC<Props> = ({
+export const SelectWithAdd = ({
   value,
   onChange,
   options,
@@ -31,7 +31,7 @@ export const SelectWithAdd: FC<Props> = ({
   addLabel = '+ Add new',
   'aria-label': ariaLabel,
   getOptionLabel,
-}) => {
+}: Props) => {
   const [isCustom, setIsCustom] = useState(custom);
 
   useEffect(() => {
@@ -43,6 +43,14 @@ export const SelectWithAdd: FC<Props> = ({
     [options, addLabel]
   );
 
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (inputRef.current && isCustom) {
+      inputRef.current.focus();
+    }
+  }, [isCustom]);
+
   if (isCustom) {
     return (
       <Input
@@ -53,6 +61,7 @@ export const SelectWithAdd: FC<Props> = ({
         placeholder={placeholder}
         className={className}
         disabled={disabled}
+        ref={inputRef}
         onChange={(e) => onChange(e.currentTarget.value)}
       />
     );

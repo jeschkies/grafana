@@ -16,7 +16,7 @@ import { BigValue, DataLinksContextMenu, VizRepeater, VizRepeaterRenderValueProp
 import { DataLinksContextMenuApi } from '@grafana/ui/src/components/DataLinks/DataLinksContextMenu';
 import { config } from 'app/core/config';
 
-import { PanelOptions } from './models.gen';
+import { PanelOptions } from './panelcfg.gen';
 
 export class StatPanel extends PureComponent<PanelProps<PanelOptions>> {
   renderComponent = (
@@ -37,6 +37,7 @@ export class StatPanel extends PureComponent<PanelProps<PanelOptions>> {
         count={count}
         sparkline={sparkline}
         colorMode={options.colorMode}
+        hasGradient={options.hasGradient}
         graphMode={options.graphMode}
         justifyMode={options.justifyMode}
         textMode={this.getTextMode()}

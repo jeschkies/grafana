@@ -78,20 +78,7 @@ export const SearchView = ({ showManage, folderDTO, hidePseudoFolders, keyboardE
         <div className={styles.noResults}>
           <div>No results found for your query.</div>
           <br />
-          <Button
-            variant="secondary"
-            onClick={() => {
-              if (state.query) {
-                stateManager.onQueryChange('');
-              }
-              if (state.tag?.length) {
-                stateManager.onTagFilterChange([]);
-              }
-              if (state.datasource) {
-                stateManager.onDatasourceChange(undefined);
-              }
-            }}
-          >
+          <Button variant="secondary" onClick={stateManager.onClearSearchAndFilters}>
             Clear search and filters
           </Button>
         </div>
@@ -159,7 +146,7 @@ export const SearchView = ({ showManage, folderDTO, hidePseudoFolders, keyboardE
     );
   };
 
-  if (folderDTO && !state.loading && !state.result?.totalRows && !state.query.length) {
+  if (folderDTO && !state.loading && !state.result?.totalRows && !stateManager.hasSearchFilters()) {
     return (
       <EmptyListCTA
         title="This folder doesn't have any dashboards yet"
@@ -189,6 +176,7 @@ export const SearchView = ({ showManage, folderDTO, hidePseudoFolders, keyboardE
           getSortOptions={getGrafanaSearcher().getSortOptions}
           sortPlaceholder={getGrafanaSearcher().sortPlaceholder}
           onDatasourceChange={stateManager.onDatasourceChange}
+          onPanelTypeChange={stateManager.onPanelTypeChange}
           state={state}
           includePanels={state.includePanels!}
           onSetIncludePanels={stateManager.onSetIncludePanels}

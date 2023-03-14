@@ -10,18 +10,21 @@ import {
   DashboardCursorSync,
   EventFilterOptions,
   FieldConfigSource,
+  getDataSourceRef,
   getDefaultTimeRange,
+  LinkModel,
   LoadingState,
   PanelData,
   PanelPlugin,
   PanelPluginMeta,
   PluginContextProvider,
+  renderMarkdown,
   TimeRange,
   toDataFrameDTO,
   toUtc,
 } from '@grafana/data';
 import { selectors } from '@grafana/e2e-selectors';
-import { config, locationService, RefreshEvent } from '@grafana/runtime';
+import { getTemplateSrv, config, locationService, RefreshEvent, reportInteraction } from '@grafana/runtime';
 import { VizLegendOptions } from '@grafana/schema';
 import {
   ErrorBoundary,
@@ -30,11 +33,17 @@ import {
   PanelContextProvider,
   PanelPadding,
   SeriesVisibilityChangeMode,
+  AdHocFilterItem,
 } from '@grafana/ui';
 import { PANEL_BORDER } from 'app/core/constants';
 import { profiler } from 'app/core/profiler';
 import { applyPanelTimeOverrides } from 'app/features/dashboard/utils/panel';
+import { InspectTab } from 'app/features/inspector/types';
+import { getPanelLinksSupplier } from 'app/features/panel/panellinks/linkSuppliers';
+import { getDatasourceSrv } from 'app/features/plugins/datasource_srv';
+import { applyFilterFromTable } from 'app/features/variables/adhoc/actions';
 import { changeSeriesColorConfigFactory } from 'app/plugins/panel/timeseries/overrides/colorSeriesConfigFactory';
+import { dispatch } from 'app/store/store';
 import { RenderEvent } from 'app/types/events';
 
 import { isSoloRoute } from '../../../routes/utils';
@@ -45,7 +54,8 @@ import { DashboardModel, PanelModel } from '../state';
 import { loadSnapshotData } from '../utils/loadSnapshotData';
 
 import { PanelHeader } from './PanelHeader/PanelHeader';
-import { PanelHeaderLoadingIndicator } from './PanelHeader/PanelHeaderLoadingIndicator';
+import { PanelHeaderMenuWrapperNew } from './PanelHeader/PanelHeaderMenuWrapper';
+import { PanelHeaderTitleItems } from './PanelHeader/PanelHeaderTitleItems';
 import { seriesVisibilityConfigFactory } from './SeriesVisibilityConfigFactory';
 import { liveTimer } from './liveTimer';
 
@@ -62,6 +72,7 @@ export interface Props {
   height: number;
   onInstanceStateChange: (value: any) => void;
   timezone?: string;
+  hideMenu?: boolean;
 }
 
 export interface State {
@@ -78,6 +89,7 @@ export class PanelStateWrapper extends PureComponent<Props, State> {
   private readonly timeSrv: TimeSrv = getTimeSrv();
   private subs = new Subscription();
   private eventFilter: EventFilterOptions = { onlyLocal: true };
+  private descriptionInteractionReported = false;
 
   constructor(props: Props) {
     super(props);
@@ -103,6 +115,7 @@ export class PanelStateWrapper extends PureComponent<Props, State> {
         canAddAnnotations: props.dashboard.canAddAnnotations.bind(props.dashboard),
         canEditAnnotations: props.dashboard.canEditAnnotations.bind(props.dashboard),
         canDeleteAnnotations: props.dashboard.canDeleteAnnotations.bind(props.dashboard),
+        onAddAdHocFilter: this.onAddAdHocFilter,
       },
       data: this.getInitialPanelDataState(),
     };
@@ -288,8 +301,14 @@ export class PanelStateWrapper extends PureComponent<Props, State> {
         }
         break;
       case LoadingState.Error:
-        const { error } = data;
-        if (error) {
+        const { error, errors } = data;
+        if (errors?.length) {
+          if (errors.length === 1) {
+            errorMessage = errors[0].message;
+          } else {
+            errorMessage = 'Multiple errors found. Click for more details';
+          }
+        } else if (error) {
           if (errorMessage !== error.message) {
             errorMessage = error.message;
           }
@@ -439,6 +458,20 @@ export class PanelStateWrapper extends PureComponent<Props, State> {
     );
   }
 
+  onAddAdHocFilter = (filter: AdHocFilterItem) => {
+    const { key, value, operator } = filter;
+
+    // When the datasource is null/undefined (for a default datasource), we use getInstanceSettings
+    // to find the real datasource ref for the default datasource.
+    const datasourceInstance = getDatasourceSrv().getInstanceSettings(this.props.panel.datasource);
+    const datasourceRef = datasourceInstance && getDataSourceRef(datasourceInstance);
+    if (!datasourceRef) {
+      return;
+    }
+
+    dispatch(applyFilterFromTable({ datasource: datasourceRef, key, operator, value }));
+  };
+
   renderPanelContent(innerWidth: number, innerHeight: number) {
     const { panel, plugin, dashboard } = this.props;
     const { renderCounter, data } = this.state;
@@ -566,32 +599,113 @@ export class PanelStateWrapper extends PureComponent<Props, State> {
     return !panel.hasTitle();
   }
 
+  onShowPanelDescription = () => {
+    const { panel } = this.props;
+    const descriptionMarkdown = getTemplateSrv().replace(panel.description, panel.scopedVars);
+    const interpolatedDescription = renderMarkdown(descriptionMarkdown);
+
+    if (!this.descriptionInteractionReported) {
+      // Description rendering function can be called multiple times due to re-renders but we want to report the interaction once.
+      reportInteraction('dashboards_panelheader_description_displayed');
+      this.descriptionInteractionReported = true;
+    }
+
+    return interpolatedDescription;
+  };
+
+  onShowPanelLinks = (): LinkModel[] => {
+    const { panel } = this.props;
+    const linkSupplier = getPanelLinksSupplier(panel);
+    if (linkSupplier) {
+      const panelLinks = linkSupplier && linkSupplier.getLinks(panel.replaceVariables);
+
+      return panelLinks.map((panelLink) => ({
+        ...panelLink,
+        onClick: (...args) => {
+          reportInteraction('dashboards_panelheader_datalink_clicked', { has_multiple_links: panelLinks.length > 1 });
+          panelLink.onClick?.(...args);
+        },
+      }));
+    }
+    return [];
+  };
+
+  onOpenInspector = (e: React.SyntheticEvent, tab: string) => {
+    e.stopPropagation();
+    locationService.partial({ inspect: this.props.panel.id, inspectTab: tab });
+  };
+
+  onOpenErrorInspect = (e: React.SyntheticEvent) => {
+    e.stopPropagation();
+    locationService.partial({ inspect: this.props.panel.id, inspectTab: InspectTab.Error });
+    reportInteraction('dashboards_panelheader_statusmessage_clicked');
+  };
+
   render() {
     const { dashboard, panel, isViewing, isEditing, width, height, plugin } = this.props;
     const { errorMessage, data } = this.state;
     const { transparent } = panel;
 
     const alertState = data.alertState?.state;
+    const hasHoverHeader = this.hasOverlayHeader();
 
     const containerClassNames = classNames({
       'panel-container': true,
       'panel-container--absolute': isSoloRoute(locationService.getLocation().pathname),
       'panel-container--transparent': transparent,
-      'panel-container--no-title': this.hasOverlayHeader(),
+      'panel-container--no-title': hasHoverHeader,
       [`panel-alert-state--${alertState}`]: alertState !== undefined,
     });
 
-    // for new panel header design
-    const onCancelQuery = () => panel.getQueryRunner().cancelQuery();
     const title = panel.getDisplayTitle();
-    const noPadding: PanelPadding = plugin.noPadding ? 'none' : 'md';
-    const leftItems = [
-      <PanelHeaderLoadingIndicator state={data.state} onClick={onCancelQuery} key="loading-indicator" />,
-    ];
+    const padding: PanelPadding = plugin.noPadding ? 'none' : 'md';
 
+    const showTitleItems =
+      (panel.links && panel.links.length > 0 && this.onShowPanelLinks) ||
+      (data.series.length > 0 && data.series.some((v) => (v.meta?.notices?.length ?? 0) > 0)) ||
+      (data.request && data.request.timeInfo) ||
+      alertState;
+
+    const titleItems = showTitleItems && (
+      <PanelHeaderTitleItems
+        key="title-items"
+        alertState={alertState}
+        data={data}
+        panelId={panel.id}
+        panelLinks={panel.links}
+        onShowPanelLinks={this.onShowPanelLinks}
+      />
+    );
+
+    const dragClass = !(isViewing || isEditing) ? 'grid-drag-handle' : '';
     if (config.featureToggles.newPanelChromeUI) {
+      // Shift the hover menu down if it's on the top row so it doesn't get clipped by topnav
+      const hoverHeaderOffset = (panel.gridPos?.y ?? 0) === 0 ? -16 : undefined;
+
+      const menu = (
+        <div data-testid="panel-dropdown">
+          <PanelHeaderMenuWrapperNew panel={panel} dashboard={dashboard} loadingState={data.state} />
+        </div>
+      );
+
       return (
-        <PanelChrome width={width} height={height} title={title} leftItems={leftItems} padding={noPadding}>
+        <PanelChrome
+          width={width}
+          height={height}
+          title={title}
+          loadingState={data.state}
+          statusMessage={errorMessage}
+          statusMessageOnClick={this.onOpenErrorInspect}
+          description={!!panel.description ? this.onShowPanelDescription : undefined}
+          titleItems={titleItems}
+          menu={this.props.hideMenu ? undefined : menu}
+          dragClass={dragClass}
+          dragClassCancel="grid-drag-cancel"
+          padding={padding}
+          hoverHeaderOffset={hoverHeaderOffset}
+          hoverHeader={this.hasOverlayHeader()}
+          displayMode={transparent ? 'transparent' : 'default'}
+        >
           {(innerWidth, innerHeight) => (
             <>
               <ErrorBoundary
