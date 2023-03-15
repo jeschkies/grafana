@@ -590,6 +590,12 @@ func readTrace(iter *jsoniter.Iterator) (backend.DataResponse, error) {
 		return backend.DataResponse{}, fmt.Errorf("failed to transform trace to data frame: %w", err)
 	}
 
+	if frame == nil {
+		return backend.DataResponse{
+			Frames: []*data.Frame{},
+		}, nil
+	}
+
 	return backend.DataResponse{
 		Frames: []*data.Frame{frame},
 	}, nil
