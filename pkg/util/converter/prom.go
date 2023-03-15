@@ -134,7 +134,7 @@ func readPrometheusData(iter *jsoniter.Iterator, opt Options) backend.DataRespon
 			case "scalar":
 				rsp = readScalar(iter)
 			case "trace":
-				rsp = readTrace(iter)
+				rsp, _ = readTrace(iter)
 			default:
 				iter.Skip()
 				rsp = backend.DataResponse{
@@ -571,20 +571,20 @@ func readTimeValuePair(iter *jsoniter.Iterator) (time.Time, float64, error) {
 	return tt, fv, err
 }
 
-func readTrace(iter *jsoniter.Iterator) (*backend.DataResponse, error) {
+func readTrace(iter *jsoniter.Iterator) (backend.DataResponse, error) {
 	buf := iter.SkipAndReturnBytes()
 	otTrace, err := otlp.NewJSONTracesUnmarshaler().UnmarshalTraces(buf)
 
 	if err != nil {
-		return &backend.DataResponse{}, fmt.Errorf("failed to convert tempo response to Otlp: %w", err)
+		return backend.DataResponse{}, fmt.Errorf("failed to convert tempo response to Otlp: %w", err)
 	}
 
 	frame, err := tempo.TraceToFrame(otTrace)
 	if err != nil {
-		return &backend.DataResponse{}, fmt.Errorf("failed to transform trace to data frame: %w", err)
+		return backend.DataResponse{}, fmt.Errorf("failed to transform trace to data frame: %w", err)
 	}
 
-	return &backend.DataResponse{
+	return backend.DataResponse{
 		Frames: []*data.Frame{frame},
 	}, nil
 }
