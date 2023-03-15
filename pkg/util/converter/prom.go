@@ -134,7 +134,13 @@ func readPrometheusData(iter *jsoniter.Iterator, opt Options) backend.DataRespon
 			case "scalar":
 				rsp = readScalar(iter)
 			case "trace":
-				rsp, _ = readTrace(iter)
+				var err error
+				rsp, err = readTrace(iter)
+				if err != nil {
+					return backend.DataResponse{
+						Error: err,
+					}
+				}
 			default:
 				iter.Skip()
 				rsp = backend.DataResponse{
