@@ -26,9 +26,11 @@ func adjustFrame(frame *data.Frame, query *lokiQuery) error {
 
 	if secondField.Type() == data.FieldTypeFloat64 {
 		return adjustMetricFrame(frame, query)
-	} else {
+	} else if secondField.Type() == data.FieldTypeTime {
 		return adjustLogsFrame(frame, query)
 	}
+
+	return nil
 }
 
 func adjustMetricFrame(frame *data.Frame, query *lokiQuery) error {

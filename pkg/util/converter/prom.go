@@ -582,7 +582,7 @@ func readTrace(iter *jsoniter.Iterator) (backend.DataResponse, error) {
 	otTrace, err := otlp.NewJSONTracesUnmarshaler().UnmarshalTraces(buf)
 
 	if err != nil {
-		return backend.DataResponse{}, fmt.Errorf("failed to convert tempo response to Otlp: %w", err)
+		return backend.DataResponse{}, fmt.Errorf("failed to convert Loki response to Otlp: %w", err)
 	}
 
 	frame, err := tempo.TraceToFrame(otTrace)
