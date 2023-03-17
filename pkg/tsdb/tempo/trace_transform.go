@@ -88,17 +88,14 @@ func resourceSpansToRows(rs pdata.ResourceSpans) ([][]interface{}, error) {
 	rows := make([][]interface{}, 0, ilss.At(0).Spans().Len())
 
 	for i := 0; i < ilss.Len(); i++ {
-		fmt.Printf("ills at %d", i)
 		ils := ilss.At(i)
 
 		// These are finally the actual spans
 		spans := ils.Spans()
 
 		for j := 0; j < spans.Len(); j++ {
-			fmt.Printf("span at %d", j)
 			span := spans.At(j)
 			row, err := spanToSpanRow(span, ils.InstrumentationLibrary(), resource)
-			fmt.Printf("span %v", span)
 			if err != nil {
 				return nil, err
 			}

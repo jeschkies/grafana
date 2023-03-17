@@ -17,7 +17,7 @@ import (
 
 // helpful while debugging all the options that may appear
 func logf(format string, a ...interface{}) {
-	fmt.Printf(format, a...)
+	//fmt.Printf(format, a...)
 }
 
 type Options struct {
@@ -578,7 +578,6 @@ func readTimeValuePair(iter *jsoniter.Iterator) (time.Time, float64, error) {
 }
 
 func readTrace(iter *jsoniter.Iterator) (backend.DataResponse, error) {
-	logf("read traces")
 	buf := iter.SkipAndReturnBytes()
 	otTrace, err := otlp.NewJSONTracesUnmarshaler().UnmarshalTraces(buf)
 
