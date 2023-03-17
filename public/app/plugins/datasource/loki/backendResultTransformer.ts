@@ -37,7 +37,7 @@ function processStreamFrame(
   }
 
   const meta: QueryResultMeta = {
-    preferredVisualisationType: 'logs',
+    preferredVisualisationType: frame.meta?.preferredVisualisationType || 'logs',
     limit: query?.maxLines,
     searchWords: query !== undefined ? getHighlighterExpressionsFromQuery(formatQuery(query.expr)) : undefined,
     custom,
